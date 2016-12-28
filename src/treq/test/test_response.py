@@ -1,9 +1,10 @@
-from twisted.trial.unittest import SynchronousTestCase
+from twisted.trial.unittest import TestCase
 
 from twisted import version
 from twisted.python.failure import Failure
 from twisted.python.versions import Version
 from twisted.web.client import ResponseDone
+from twisted.web.error import Error
 from twisted.web.http_headers import Headers
 
 from treq.response import _Response
@@ -32,7 +33,7 @@ class FakeResponse(object):
         protocol.connectionLost(Failure(ResponseDone()))
 
 
-class ResponseTests(SynchronousTestCase):
+class ResponseTests(TestCase):
     def test_collect(self):
         original = FakeResponse(200, Headers(), body=[b'foo', b'bar', b'baz'])
         calls = []
@@ -98,3 +99,18 @@ class ResponseTests(SynchronousTestCase):
 
     if not skip_history:
         test_history_notimplemented.skip = "History supported."
+
+    def test_fail_for_status_ok(self):
+        original = FakeResponse(200, Headers(), body=[b''])
+        response = _Response(original, None)
+        d = response.fail_for_status()
+        d.addCallback(self.assertEqual, response)
+
+        return d
+
+    def test_fail_for_status_error(self):
+        original = FakeResponse(400, Headers(), body=[b'body'])
+        response = _Response(original, None)
+        error = self.failureResultOf(response.fail_for_status(), Error).value
+        self.assertEqual(error.status, b'400')
+        self.assertEqual(error.response, b'body')
